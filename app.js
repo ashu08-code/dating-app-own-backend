@@ -6,6 +6,8 @@ import premiumRoutes from "./routes/premium.routes.js";
 import communityRoutes from "./routes/community.routes.js";
 import settingsRoutes from "./routes/settings.routes.js";
 import chatRoutes from "./routes/chat.routes.js";
+import vibeRoutes from "./routes/vibe.routes.js";
+import notificationRoutes from "./routes/notification.routes.js";
 import path from "path";
 import { fileURLToPath } from "url";
 
@@ -27,5 +29,7 @@ app.use("/api/premium", premiumRoutes);
 app.use("/api/community", communityRoutes);
 app.use("/api/settings", settingsRoutes);
 app.use("/api/chat", chatRoutes);
+app.use("/api/vibe", vibeRoutes);
+app.use("/api/notifications", notificationRoutes);
 
 export default app;

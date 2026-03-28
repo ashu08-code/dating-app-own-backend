@@ -56,10 +56,11 @@ export const getLikes = async (req, res) => {
       // as we don't have DOB in current schema. We'll send name and photo.
       return {
         likeId: like.id,
-        userId: sender.id,
+        id: sender.id, // Using 'id' for consistency with HomeScreen rendering
         name: sender.name,
-        photo: sender.profile?.photo || null,
-        city: sender.profile?.city || null,
+        age: 24, // Mock until real age is in schema
+        photo: sender.profile?.photo ? sender.profile.photo.replace(/\\/g, "/") : null,
+        city: sender.profile?.city || "Nearby",
         likedAt: like.createdAt,
       };
     });
@@ -150,22 +151,50 @@ export const sendLike = async (req, res) => {
 
       // CASE B: Changing from REJECTED to LIKE (Second chance)
       if (action === "like") {
-        // Update my status to pending first
-        await currentInteraction.update({ status: "pending" }, { transaction: t });
-        // Proceed to check for match below...
-      }
-    } else {
-      // 4. Create new interaction if none exists
-      currentInteraction = await Like.create({
-        senderId,
-        receiverId,
-        status: targetStatus,
-      }, { transaction: t });
+        // Check if the other person has liked me
+        const otherInteraction = await Like.findOne({
+          where: { senderId: receiverId, receiverId: senderId },
+          transaction: t
+        });
+        const otherLikedMe = otherInteraction && otherInteraction.status === 'pending';
 
-      if (action === "dislike") {
+        // CASE B: It's a MATCH!
+        if (otherLikedMe) {
+          await currentInteraction.update({ status: "matched" }, { transaction: t });
+          await otherInteraction.update({ status: "matched" }, { transaction: t });
+
+          // 🔥 Notification for match (Both users)
+          const { createNotification } = await import("../utils/notification.js");
+          await createNotification(req.app, receiverId, senderId, "match", "It's a Match! ❤️ Click to start chatting.");
+          await createNotification(req.app, senderId, receiverId, "match", "You matched with a new profile! ✨");
+
           await t.commit();
-          return sendResponse(res, true, 200, { isMatch: false }, "User disliked successfully");
+          return sendResponse(res, true, 200, { isMatch: true }, "It's a match!");
+        }
+
+        // CASE C: Just a NEW Like
+        await currentInteraction.update({ status: "pending" }, { transaction: t });
+
+        // 🔥 Notification for new like
+        const { createNotification } = await import("../utils/notification.js");
+        await createNotification(req.app, receiverId, senderId, "like", "Someone liked your profile! 💕");
+
+        await t.commit();
+        return sendResponse(res, true, 200, { isMatch: false }, "User liked");
       }
+
+      // 4. Create NEW interaction
+      const targetStatus = action === "dislike" ? "rejected" : "pending";
+      await Like.create({ senderId, receiverId, status: targetStatus }, { transaction: t });
+
+      // 🔥 Notification for new like (Non-interacted)
+      if (action === "like") {
+        const { createNotification } = await import("../utils/notification.js");
+        await createNotification(req.app, receiverId, senderId, "like", "New interest! Someone is looking at you. 👀");
+      }
+
+      await t.commit();
+      return sendResponse(res, true, 201, { isMatch: false }, action === "like" ? "User liked" : "User disliked");
     }
 
     // 5. Check for Match (Only reachable if action is 'like' and we are now 'pending')

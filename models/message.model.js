@@ -33,6 +33,10 @@ export default (sequelize, DataTypes) => {
         type: DataTypes.BOOLEAN,
         defaultValue: false,
       },
+      isDelivered: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
+      },
       type: {
         type: DataTypes.ENUM("text", "image", "file"),
         defaultValue: "text",
@@ -48,6 +52,27 @@ export default (sequelize, DataTypes) => {
       isEdited: {
         type: DataTypes.BOOLEAN,
         defaultValue: false,
+      },
+      isPinned: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
+      },
+      isForwarded: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
+      },
+      isDeletedForEveryone: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
+      },
+      replyToId: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        references: {
+          model: "messages",
+          key: "id",
+        },
+        onDelete: "SET NULL",
       },
     },
     {

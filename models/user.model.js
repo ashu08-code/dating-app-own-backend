@@ -41,6 +41,14 @@ export default (sequelize, DataTypes) => {
         type: DataTypes.BOOLEAN,
         defaultValue: true,
       },
+      vibe: {
+        type: DataTypes.STRING, // stores strings like "Midnight Drive", "Quiet Beach"
+        allowNull: true,
+      },
+      vibeUpdatedAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
     },
     {
       tableName: "user_profiles",
