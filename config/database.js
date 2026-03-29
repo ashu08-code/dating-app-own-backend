@@ -17,6 +17,11 @@ dotenv.config();
 // );
 
 //for live 
+const dbUrl = process.env.DATABASE_URL;
+if (!dbUrl) {
+  console.error("❌ DATABASE_URL is missing");
+  process.exit(1);
+}
 
 const sequelize = new Sequelize(process.env.DATABASE_URL, {
   dialect: "postgres",

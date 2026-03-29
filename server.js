@@ -18,6 +18,16 @@ const io = new Server(httpServer, {
   },
 });
 
+if (!process.env.JWT_SECRET) {
+  console.error("❌ JWT_SECRET missing");
+  process.exit(1);
+}
+
+if (!process.env.DATABASE_URL) {
+  console.error("❌ DATABASE_URL missing");
+  process.exit(1);
+}
+
 app.set("io", io);
 
 // Store connected users: userId -> Set of socketIds
