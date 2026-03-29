@@ -6,7 +6,7 @@ import db from "../models/index.js";
 import sendResponse, { errorResponse } from "../utils/response.js";
 import sendEmail from "../utils/sendEmail.js";
 
-import { OAuth2Client } from "google-auth-library";
+import { OAuth2Client } from "google-auth-library" ;
 
 const { Auth, UserProfile } = db;
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
