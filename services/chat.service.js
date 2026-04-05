@@ -99,6 +99,7 @@ export const getMessagesBetweenUsers = async (userId1, userId2) => {
 };
 
 export const getUserConversations = async (userId, getArchived = false) => {
+  // 1. Get info on archived and pinned chats
   const archivedRecords = await ArchivedChat.findAll({
       where: { userId },
       attributes: ["targetUserId"]
@@ -111,63 +112,88 @@ export const getUserConversations = async (userId, getArchived = false) => {
   });
   const pinnedIds = pinnedRecords.map(r => r.targetUserId);
 
-  const messages = await Message.findAll({
+  // 2. Base conversations on Matches and Message interactions
+  
+  // A. Mutual Matches (Active conversations base)
+  const matches = await Like.findAll({
+      where: {
+          [Op.or]: [
+              { senderId: userId, status: 'matched' },
+              { receiverId: userId, status: 'matched' }
+          ]
+      }
+  });
+  const matchedUserIds = matches.map(m => m.senderId === userId ? m.receiverId : m.senderId);
+
+  // B. Message interactions (Anyone the user has sent/received messages from that aren't deleted for everyone)
+  const messageInteractions = await Message.findAll({
     where: {
         [Op.or]: [
-          { senderId: userId, isDeletedBySender: { [Op.ne]: true }, isDeletedForEveryone: { [Op.ne]: true } },
-          { receiverId: userId, isDeletedByReceiver: { [Op.ne]: true }, isDeletedForEveryone: { [Op.ne]: true } }
+          { senderId: userId, isDeletedForEveryone: { [Op.ne]: true } },
+          { receiverId: userId, isDeletedForEveryone: { [Op.ne]: true } }
       ],
     },
-    order: [["createdAt", "DESC"]],
-    include: [
-      {
-        model: Auth,
-        as: "sender",
-        attributes: ["id", "name", "email"],
-        include: [{ model: User, as: "profile", attributes: ["photo"] }],
-      },
-      {
-        model: Auth,
-        as: "receiver",
-        attributes: ["id", "name", "email"],
-        include: [{ model: User, as: "profile", attributes: ["photo"] }],
-      },
-    ],
+    attributes: ['senderId', 'receiverId'],
+    group: ['senderId', 'receiverId']
   });
 
-  const conversations = [];
-  const seenUsers = new Set();
+  const interactionUserIds = new Set(matchedUserIds);
+  messageInteractions.forEach(m => {
+      interactionUserIds.add(m.senderId === userId ? m.receiverId : m.senderId);
+  });
 
-  for (const msg of messages) {
-    const otherUser = msg.senderId === userId ? msg.receiver : msg.sender;
-    
-    // Skip if we want active chats but this one is archived, OR vice versa
-    const isArchived = archivedIds.includes(otherUser.id);
+  // 3. Construct conversation data for each unique partner
+  const conversations = [];
+  for (const partnerId of interactionUserIds) {
+    // Skip if archived filter mismatch
+    const isArchived = archivedIds.includes(partnerId);
     if (getArchived && !isArchived) continue;
     if (!getArchived && isArchived) continue;
 
-    if (!seenUsers.has(otherUser.id)) {
-      seenUsers.add(otherUser.id);
-      
-      const unreadCount = await Message.count({
-          where: {
-              senderId: otherUser.id,
-              receiverId: userId,
-              isRead: false
-          }
-      });
+    // Fetch partner basic details (Auth + Profile)
+    const partner = await Auth.findByPk(partnerId, {
+        attributes: ["id", "name", "email"],
+        include: [{ model: User, as: "profile", attributes: ["photo"] }],
+    });
 
-      conversations.push({
-        user: otherUser,
-        lastMessage: msg.content,
-        timestamp: msg.createdAt,
-        isPinned: pinnedIds.includes(otherUser.id),
-        unreadCount
-      });
+    if (!partner) continue;
+
+    // Fetch latest message NOT deleted by the current user
+    const lastMsg = await Message.findOne({
+        where: {
+          [Op.or]: [
+            { senderId: userId, receiverId: partnerId, isDeletedBySender: { [Op.ne]: true }, isDeletedForEveryone: { [Op.ne]: true } },
+            { senderId: partnerId, receiverId: userId, isDeletedByReceiver: { [Op.ne]: true }, isDeletedForEveryone: { [Op.ne]: true } }
+          ]
+        },
+        order: [["createdAt", "DESC"]]
+    });
+
+    const unreadCount = await Message.count({
+        where: {
+            senderId: partnerId,
+            receiverId: userId,
+            isRead: false
+        }
+    });
+
+    // Base timestamp (Latest message or Match time or current time fallback)
+    let timestamp = lastMsg ? lastMsg.createdAt : null;
+    if (!timestamp) {
+        const match = matches.find(m => m.senderId === partnerId || m.receiverId === partnerId);
+        timestamp = match ? (match.updatedAt || match.createdAt) : new Date(); 
     }
+
+    conversations.push({
+      user: partner,
+      lastMessage: lastMsg ? lastMsg.content : null,
+      timestamp,
+      isPinned: pinnedIds.includes(partnerId),
+      unreadCount
+    });
   }
 
-  // Sort: Pinned first, then by timestamp
+  // 4. Sort: Pinned first, then by timestamp descending
   return conversations.sort((a, b) => {
       if (a.isPinned && !b.isPinned) return -1;
       if (!a.isPinned && b.isPinned) return 1;

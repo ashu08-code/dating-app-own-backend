@@ -5,16 +5,26 @@ import Razorpay from "razorpay";
 import crypto from "crypto";
 import dotenv from "dotenv";
 
-dotenv.config();
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+dotenv.config({ path: path.join(__dirname, "../.env") });
+
+let razorpay;
+const getRazorpay = () => {
+  if (!razorpay) {
+    razorpay = new Razorpay({
+      key_id: process.env.RAZORPAY_KEY_ID || "rzp_test_placeholder",
+      key_secret: process.env.RAZORPAY_KEY_SECRET || "secret_placeholder",
+    });
+  }
+  return razorpay;
+};
 
 const { Subscription } = db;
-
-const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID || "rzp_test_placeholder",
-  key_secret: process.env.RAZORPAY_KEY_SECRET || "secret_placeholder",
-});
-
-console.log(process.env.RAZORPAY_KEY_ID,process.env.RAZORPAY_KEY_SECRET)
 
 const PLANS = [
   { 
@@ -52,13 +62,17 @@ export const createOrder = async (req, res) => {
     const options = {
       amount: plan.price * 100, // In paise
       currency: "INR",
-      receipt: `receipt_${req.user.id}_${Date.now()}`,
+      receipt: `ord_${Date.now()}`,
     };
 
+    console.log("Creating Razorpay Order with options:", options);
+
+    const razorpay = getRazorpay();
     const order = await razorpay.orders.create(options);
     return sendResponse(res, true, 201, { order, key_id: process.env.RAZORPAY_KEY_ID }, "Order created successfully");
   } catch (error) {
-    return errorResponse(res, error.message, 500);
+    console.error("Razorpay Order Creation Error:", error);
+    return errorResponse(res, error.message || "Something went wrong while creating order", 500);
   }
 };
 
@@ -76,6 +90,7 @@ export const verifyPayment = async (req, res) => {
     }
 
     const sign = razorpay_order_id + "|" + razorpay_payment_id;
+    const razorpay = getRazorpay();
     const expectedSign = crypto
       .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
       .update(sign.toString())

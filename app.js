@@ -1,4 +1,5 @@
 import express from "express";
+import cors from "cors";
 import authRoutes from "./routes/auth.routes.js";
 import userRoutes from "./routes/user.routes.js";
 import likeRoutes from "./routes/like.routes.js";
@@ -16,6 +17,7 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 
+app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true })); // Handle standard form submissions
 
