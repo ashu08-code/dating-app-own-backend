@@ -187,6 +187,7 @@ export const getUserConversations = async (userId, getArchived = false) => {
     conversations.push({
       user: partner,
       lastMessage: lastMsg ? lastMsg.content : null,
+      lastMessageType: lastMsg ? lastMsg.type : "text",
       timestamp,
       isPinned: pinnedIds.includes(partnerId),
       unreadCount
