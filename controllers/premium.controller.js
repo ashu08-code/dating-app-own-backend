@@ -13,17 +13,7 @@ const __dirname = path.dirname(__filename);
 
 dotenv.config({ path: path.join(__dirname, "../.env") });
 
-let razorpay;
-const getRazorpay = () => {
-  if (!razorpay) {
-    razorpay = new Razorpay({
-      key_id: process.env.RAZORPAY_KEY_ID || "rzp_test_placeholder",
-      key_secret: process.env.RAZORPAY_KEY_SECRET || "secret_placeholder",
-    });
-  }
-  return razorpay;
-};
-
+// Razorpay is initialized directly in the functions to ensure fresh environment variables
 const { Subscription } = db;
 
 const PLANS = [
@@ -56,23 +46,38 @@ const PLANS = [
 export const createOrder = async (req, res) => {
   try {
     const { planId } = req.body;
+    
+    if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
+      console.error("CRITICAL: Razorpay keys are missing from environment variables!");
+      return sendResponse(res, false, 500, {}, "Payment system configuration error");
+    }
+
     const plan = PLANS.find(p => p.id === planId);
     if (!plan) return sendResponse(res, false, 400, {}, "Invalid Plan");
 
     const options = {
-      amount: plan.price * 100, // In paise
+      amount: Math.round(plan.price * 100), // Ensure it's an integer
       currency: "INR",
       receipt: `ord_${Date.now()}`,
     };
 
-    console.log("Creating Razorpay Order with options:", options);
+    console.log("Attempting to create Razorpay Order with ID:", planId, "Options:", options);
 
-    const razorpay = getRazorpay();
-    const order = await razorpay.orders.create(options);
+    // Ensure we use the latest env vars
+    const razorpayInstance = new Razorpay({
+      key_id: process.env.RAZORPAY_KEY_ID,
+      key_secret: process.env.RAZORPAY_KEY_SECRET,
+    });
+
+    const order = await razorpayInstance.orders.create(options);
+    console.log("Razorpay Order Created Successfully:", order.id);
+    
     return sendResponse(res, true, 201, { order, key_id: process.env.RAZORPAY_KEY_ID }, "Order created successfully");
   } catch (error) {
-    console.error("Razorpay Order Creation Error:", error);
-    return errorResponse(res, error.message || "Something went wrong while creating order", 500);
+    console.error("Razorpay Order Creation Error Full:", error);
+    // Extract most useful message
+    const errorMessage = error.error?.description || error.message || "Something went wrong while creating order";
+    return errorResponse(res, errorMessage, 500);
   }
 };
 
@@ -90,7 +95,10 @@ export const verifyPayment = async (req, res) => {
     }
 
     const sign = razorpay_order_id + "|" + razorpay_payment_id;
-    const razorpay = getRazorpay();
+    const razorpayInstance = new Razorpay({
+      key_id: process.env.RAZORPAY_KEY_ID,
+      key_secret: process.env.RAZORPAY_KEY_SECRET,
+    });
     const expectedSign = crypto
       .createHmac("sha256", process.env.RAZORPAY_KEY_SECRET)
       .update(sign.toString())

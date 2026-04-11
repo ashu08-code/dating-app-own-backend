@@ -216,3 +216,44 @@ export const markAsRead = async (req, res) => {
         res.status(500).json({ message: "Server error" });
     }
 };
+export const uploadImages = async (req, res) => {
+    try {
+        const { receiverId } = req.body;
+        const senderId = req.user.id;
+        const files = req.files;
+
+        if (!files || files.length === 0) {
+            return res.status(400).json({ message: "No images provided" });
+        }
+
+        const createdMessages = [];
+        const io = req.app.get("io");
+
+        for (const file of files) {
+            const message = await ChatService.createMessage({
+                senderId,
+                receiverId,
+                content: file.path.replace(/\\/g, "/"), // Save path
+                type: "image"
+            });
+            
+            const messageData = message.toJSON();
+            createdMessages.push(messageData);
+
+            // Real-time emit
+            if (io) {
+                // Determine if sender and receiver are the same person (testing)
+                io.to(receiverId).emit("receiveMessage", messageData);
+                // Also notify sender's own devices
+                if (receiverId !== senderId) {
+                    io.to(senderId).emit("messageSent", messageData);
+                }
+            }
+        }
+
+        res.status(201).json(createdMessages);
+    } catch (error) {
+        console.error("Error uploading images:", error);
+        res.status(500).json({ message: "Server error" });
+    }
+};

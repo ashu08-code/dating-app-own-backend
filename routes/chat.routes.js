@@ -11,9 +11,11 @@ import {
     unarchiveConversation,
     pinConversation,
     unpinConversation,
-    markAsRead
+    markAsRead,
+    uploadImages
 } from "../controllers/chat.controller.js";
 import { authenticate } from "../middlewares/auth.middleware.js"; 
+import upload from "../middlewares/upload.middleware.js";
 
 const router = express.Router();
 
@@ -30,5 +32,6 @@ router.post("/unarchive/:targetUserId", authenticate, unarchiveConversation);
 router.post("/pin/:targetUserId", authenticate, pinConversation);
 router.post("/unpin/:targetUserId", authenticate, unpinConversation);
 router.post("/read/:senderId", authenticate, markAsRead);
+router.post("/upload-images", authenticate, upload.array("images", 10), uploadImages);
 
 export default router;
