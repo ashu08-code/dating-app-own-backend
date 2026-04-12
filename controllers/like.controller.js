@@ -209,21 +209,25 @@ export const sendLike = async (req, res) => {
     });
 
     let isMatch = false;
+    const { createNotification } = await import("../utils/notification.js");
+
     if (reverseLike) {
       isMatch = true;
       // Update BOTH interactions to 'matched' atomically
-      await Like.update(
-        { status: "matched" },
-        {
-          where: {
-            [Op.or]: [
-              { senderId: senderId, receiverId: receiverId },
-              { senderId: receiverId, receiverId: senderId },
-            ],
-          },
-          transaction: t,
-        }
-      );
+      await Like.create({ senderId, receiverId, status: "matched" }, { transaction: t });
+      await reverseLike.update({ status: "matched" }, { transaction: t });
+
+      // 🔥 Notifications for match
+      await createNotification(req.app, receiverId, senderId, "match", "It's a Match! ❤️ Click to start chatting.");
+      await createNotification(req.app, senderId, receiverId, "match", "You matched with a new profile! ✨");
+    } else {
+      // Create new like/dislike record
+      await Like.create({ senderId, receiverId, status: targetStatus }, { transaction: t });
+      
+      if (action === "like") {
+        // 🔥 Notification for new like
+        await createNotification(req.app, receiverId, senderId, "like", "New interest! Someone is looking at you. 👀");
+      }
     }
 
     await t.commit();

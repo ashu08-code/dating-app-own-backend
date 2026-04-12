@@ -1,4 +1,5 @@
 import * as ChatService from "../services/chat.service.js";
+import { createNotification } from "../utils/notification.js";
 
 export const sendMessage = async (req, res) => {
   try {
@@ -6,6 +7,9 @@ export const sendMessage = async (req, res) => {
     const senderId = req.user.id;
 
     const message = await ChatService.createMessage({ senderId, receiverId, content, type });
+
+    // 🔥 Trigger Persistent Notification
+    await createNotification(req.app, receiverId, senderId, "message", `New message: ${content.substring(0, 30)}${content.length > 30 ? "..." : ""}`);
 
     res.status(201).json(message);
   } catch (error) {
@@ -143,6 +147,11 @@ export const forwardMessage = async (req, res) => {
             }
         }
 
+        // 🔥 Trigger Persistent Notification (notify once for the set of forwarded messages)
+        if (createdMessages.length > 0) {
+            await createNotification(req.app, receiverIds[0], senderId, "message", `Forwarded ${createdMessages.length} message(s)`);
+        }
+
         res.status(201).json(createdMessages);
     } catch (error) {
         console.error("Error forwarding messages:", error);
@@ -228,13 +237,15 @@ export const uploadImages = async (req, res) => {
 
         const createdMessages = [];
         const io = req.app.get("io");
+        const isOnline = io && io.sockets.adapter.rooms.has(receiverId.toString());
 
         for (const file of files) {
             const message = await ChatService.createMessage({
                 senderId,
                 receiverId,
                 content: file.path.replace(/\\/g, "/"), // Save path
-                type: "image"
+                type: "image",
+                isDelivered: isOnline
             });
             
             const messageData = message.toJSON();
@@ -249,6 +260,11 @@ export const uploadImages = async (req, res) => {
                     io.to(senderId).emit("messageSent", messageData);
                 }
             }
+        }
+
+        // 🔥 Trigger Persistent Notification
+        if (createdMessages.length > 0) {
+            await createNotification(req.app, receiverId, senderId, "message", `Sent ${createdMessages.length} image(s) 📸`);
         }
 
         res.status(201).json(createdMessages);
